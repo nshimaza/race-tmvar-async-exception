@@ -11,8 +11,8 @@ When you successfully reproduced it, you will see
 * Does NOT reproduce with +RTS -N1
 * Program stalls after 'A' printed
 * High CPU based on given -Nx
-    * If you have 4 core machine with hyper thread enabled and you give -N8,
-      CPU utilization will be 100%
+    * CPU won't be 100% if you gave x smaller than available hardware threads
+      of your platform.
 * Does NOT reproduce if TMVar is replaced by MVar
 
 This program intentionally creates race condition between TMVar operation and
@@ -23,3 +23,10 @@ blocked thread.
 
 I guess when those operation happen at in parallel in SMP environment, GHC
 runtime falls into high CPU.
+
+## Reproduced platforms
+
+* macOS High Sierra (10.13.4), MacBook Pro (Retina, 15-inch, Mid 2015)
+* Docker for Mac Version 18.03.1-ce-mac65 (24312) runs on the above machine.
+
+Others are unknown (not yet attempted).

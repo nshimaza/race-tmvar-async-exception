@@ -55,7 +55,7 @@ main = do
         threadDelay 30000
 
         -- Let threads start to exit normally.
-        forkIO $ forM_  threads $ \(trigger, _) -> threadDelay 1 *> (atomically $ putTMVar trigger ())
+        forkIO $ forM_  threads $ \(trigger, _) -> threadDelay 1 *> atomically (putTMVar trigger ())
 
         -- Concurrently kill threads in order to create race.
         -- TMVar operation and asynchronous exception can hit same thread simultaneously.
