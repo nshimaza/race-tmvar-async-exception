@@ -30,6 +30,7 @@ runtime falls into high CPU.
     * GHC 8.4.2, base-4.11.1.0, stm-2.4.5.0
 * Docker for Mac Version 18.03.1-ce-mac65 (24312) runs on the above machine.
     * GHC 8.4.2, base-4.11.1.0, stm-2.4.5.0
+    * ghc-8.5.20180506
 
 Others are unknown (not yet attempted).
 
