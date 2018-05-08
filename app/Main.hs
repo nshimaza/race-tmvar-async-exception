@@ -12,8 +12,8 @@ When you successfully reproduced it, you will see
 * Does NOT reproduce with +RTS -N1
 * Program stalls after 'A' printed
 * High CPU based on given -Nx
-    * If you have 4 core machine with hyper thread enabled and you give -N8,
-      CPU utilization will be 100%
+    * CPU won't be 100% if you gave x smaller than available hardware threads
+      of your platform.
 * Does NOT reproduce if TMVar is replaced by MVar
 
 This program intentionally creates race condition between TMVar operation and
@@ -29,18 +29,29 @@ runtime falls into high CPU.
 
 module Main where
 
-import           Control.Concurrent           (forkIO, killThread, threadDelay)
+import           Control.Concurrent           (forkIO, killThread, threadDelay, forkIOWithUnmask)
 import           Control.Concurrent.STM.TMVar (newEmptyTMVarIO, putTMVar,
                                                takeTMVar)
-import           Control.Monad                (forM_, replicateM, void)
+import           Control.Exception            (AsyncException (..), catch, mask_)
+import           Control.Monad                (forM, forM_, replicateM, void)
 import           Control.Monad.STM            (atomically)
+import           System.Environment (getArgs)
 import           System.IO                    (hFlush, stdout)
 
+data ExitReason = Completed | ByException | Killed deriving (Eq)
 putStrFlush s = putStr s *> hFlush stdout
 putCharFlush c = putChar c *> hFlush stdout
 
 main :: IO ()
 main = do
+    args <- getArgs
+    case args of
+        (x:_)   | x == "v"  -> reproVerbose
+                | otherwise -> reproSimple
+        _                   -> reproSimple
+
+
+reproSimple = do
     let volume = 1000
     forM_ [1..1000] $ \i -> do
         putStrFlush $ show i ++ " "
@@ -55,7 +66,7 @@ main = do
         threadDelay 30000
 
         -- Let threads start to exit normally.
-        forkIO $ forM_  threads $ \(trigger, _) -> threadDelay 1 *> atomically (putTMVar trigger ())
+        forkIO $ forM_ threads $ \(trigger, _) -> threadDelay 1 *> atomically (putTMVar trigger ())
 
         -- Concurrently kill threads in order to create race.
         -- TMVar operation and asynchronous exception can hit same thread simultaneously.
@@ -65,3 +76,61 @@ main = do
             putCharFlush 'A'
             killThread tid      -- When the issue reproduced, this killThread doesn't return.
             putCharFlush '\b'
+
+
+reproVerbose = do
+    let volume = 1000
+    forM_ [1..1000] $ \i -> do
+        putStrFlush $ show i ++ " "
+
+        -- Spawn threads.
+        threads <- replicateM volume $ do
+            trigger <- newEmptyTMVarIO
+            monitor <- newEmptyTMVarIO
+            tid <- mask_ $ forkIOWithUnmask $ \unmask ->
+                (do
+                    unmask (void $ atomically $ takeTMVar trigger)
+                    atomically $ putTMVar monitor Completed
+                )
+                `catch`
+                (\e -> case e of
+                    ThreadKilled -> atomically $ putTMVar monitor Killed
+                    _            -> atomically $ putTMVar monitor ByException
+                )
+            pure (trigger, tid, monitor)
+
+        -- Make sure all threads are spawned.
+        threadDelay 100000
+        -- Let threads start to exit normally.
+        forkIO $ forM_ threads $ \(trigger, _, _) -> threadDelay 1 *> (atomically $ putTMVar trigger ())
+        -- Concurrently kill threads in order to create race.
+        -- TMVar operation and asynchronous exception can hit same thread simultaneously.
+        -- Adjust threadDelay if you don't reproduce very well.
+        threadDelay 1000
+        forM_ threads $ \(_, tid, _) -> do
+            putCharFlush 'A'
+            killThread tid      -- When the issue reproduced, this killThread doesn't return.
+            putCharFlush '\b'
+
+        -- Validate and show if the above exection was actually racy.
+        reports <- forM threads $ \(_, _, monitor) -> atomically $ takeTMVar monitor
+        validateReport volume reports
+
+validateReport :: Int -> [ExitReason] -> IO ()
+validateReport volume reports = do
+    if length reports /= volume
+    then putStrLn $ "Expect: length reports == " ++ show volume ++ "  Got: " ++ show (length reports)
+    else pure ()
+    let normalCount = length . filter ((==) Completed) $ reports
+        killedCount = length . filter ((==) Killed) $ reports
+    if normalCount == 0
+    then putStrLn "Expect: normalCount non-0  Got: 0"
+    else pure ()
+    if killedCount == 0
+    then putStrLn "Expect: killedCount non-0  Got: 0"
+    else pure ()
+    if normalCount + killedCount /= volume
+    then putStrLn $ "Expect: normalCount + killedCount == " ++ show volume ++ "  Got: " ++ show (normalCount + killedCount)
+    else pure ()
+    putStr $ "(" ++ show killedCount ++ ") "
+    hFlush stdout
