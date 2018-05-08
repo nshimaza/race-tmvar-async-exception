@@ -1,6 +1,6 @@
 # race-tmvar-async-exception
 
-This code demonstrates potential bug in GHC runtime where runtime stalls at
+This code demonstrates an issue in GHC runtime where runtime stalls at
 killThread and falls into high CPU.
 
 ## Summary of the issue
