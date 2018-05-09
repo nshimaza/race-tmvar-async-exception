@@ -1,10 +1,10 @@
 name:                race-tmvar-async-exception
 version:             0.1.0.0
 github:              "githubuser/race-tmvar-async-exception"
-license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+license:             MIT
+author:              "Naoto Shimazaki"
+maintainer:          "Naoto.Shimazaki@gmail.com"
+copyright:           "2018 Naoto Shimazaki"
 
 extra-source-files:
 - README.md
