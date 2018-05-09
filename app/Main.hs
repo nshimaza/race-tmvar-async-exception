@@ -29,14 +29,14 @@ runtime falls into high CPU.
 
 module Main where
 
-import           Control.Concurrent           (forkIO, killThread, threadDelay, forkIOWithUnmask)
-import           Control.Concurrent.STM.TMVar (newEmptyTMVarIO, putTMVar,
-                                               takeTMVar)
-import           Control.Exception            (AsyncException (..), catch, mask_)
-import           Control.Monad                (forM, forM_, replicateM, void)
-import           Control.Monad.STM            (atomically)
+import           Control.Concurrent (forkIO, forkIOWithUnmask, killThread,
+                                     threadDelay)
+import           Control.Exception  (AsyncException (..), catch, mask_)
+import           Control.Monad      (forM, forM_, replicateM, void)
+import           GHC.Conc.Sync      (atomically, newTVarIO, readTVar, retry,
+                                     writeTVar)
 import           System.Environment (getArgs)
-import           System.IO                    (hFlush, stdout)
+import           System.IO          (hFlush, stdout)
 
 data ExitReason = Completed | ByException | Killed deriving (Eq)
 putStrFlush s = putStr s *> hFlush stdout
@@ -58,15 +58,17 @@ reproSimple = do
 
         -- Spawn massive number of threads.
         threads <- replicateM volume $ do
-            trigger <- newEmptyTMVarIO
-            tid <- forkIO $ void $ atomically $ takeTMVar trigger
+            trigger <- newTVarIO False
+            tid <- forkIO $ void $ atomically $ do
+                t <- readTVar trigger
+                if t then pure t else retry
             pure (trigger, tid)
 
         -- Make sure all threads are spawned.
         threadDelay 30000
 
         -- Let threads start to exit normally.
-        forkIO $ forM_ threads $ \(trigger, _) -> threadDelay 1 *> atomically (putTMVar trigger ())
+        forkIO $ forM_ threads $ \(trigger, _) -> threadDelay 1 *> atomically (writeTVar trigger True)
 
         -- Concurrently kill threads in order to create race.
         -- TMVar operation and asynchronous exception can hit same thread simultaneously.
@@ -85,24 +87,24 @@ reproVerbose = do
 
         -- Spawn threads.
         threads <- replicateM volume $ do
-            trigger <- newEmptyTMVarIO
-            monitor <- newEmptyTMVarIO
+            trigger <- newTVarIO False
+            monitor <- newTVarIO Nothing
             tid <- mask_ $ forkIOWithUnmask $ \unmask ->
                 (do
-                    unmask (void $ atomically $ takeTMVar trigger)
-                    atomically $ putTMVar monitor Completed
+                    unmask (void $ atomically $ readTVar trigger >>= \t -> if t then pure t else retry)
+                    atomically $ writeTVar monitor $ Just Completed
                 )
                 `catch`
                 (\e -> case e of
-                    ThreadKilled -> atomically $ putTMVar monitor Killed
-                    _            -> atomically $ putTMVar monitor ByException
+                    ThreadKilled -> atomically $ writeTVar monitor $ Just Killed
+                    _            -> atomically $ writeTVar monitor $ Just ByException
                 )
             pure (trigger, tid, monitor)
 
         -- Make sure all threads are spawned.
         threadDelay 100000
         -- Let threads start to exit normally.
-        forkIO $ forM_ threads $ \(trigger, _, _) -> threadDelay 1 *> (atomically $ putTMVar trigger ())
+        forkIO $ forM_ threads $ \(trigger, _, _) -> threadDelay 1 *> atomically (writeTVar trigger True)
         -- Concurrently kill threads in order to create race.
         -- TMVar operation and asynchronous exception can hit same thread simultaneously.
         -- Adjust threadDelay if you don't reproduce very well.
@@ -113,7 +115,11 @@ reproVerbose = do
             putCharFlush '\b'
 
         -- Validate and show if the above exection was actually racy.
-        reports <- forM threads $ \(_, _, monitor) -> atomically $ takeTMVar monitor
+        reports <- forM threads $ \(_, _, monitor) -> atomically $ do
+            m <- readTVar monitor
+            case m of
+                Nothing -> retry
+                Just r  -> pure r
         validateReport volume reports
 
 validateReport :: Int -> [ExitReason] -> IO ()
@@ -121,8 +127,8 @@ validateReport volume reports = do
     if length reports /= volume
     then putStrLn $ "Expect: length reports == " ++ show volume ++ "  Got: " ++ show (length reports)
     else pure ()
-    let normalCount = length . filter ((==) Completed) $ reports
-        killedCount = length . filter ((==) Killed) $ reports
+    let normalCount = length . filter (== Completed) $ reports
+        killedCount = length . filter (== Killed) $ reports
     if normalCount == 0
     then putStrLn "Expect: normalCount non-0  Got: 0"
     else pure ()
