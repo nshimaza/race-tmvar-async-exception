@@ -16,10 +16,13 @@ When you successfully reproduced it, you will see
 * Does NOT reproduce if TVar/retry is replaced by MVar
 
 This program intentionally creates race condition between asynchronous exception
-and unblocking operation of `retry` on TVar.  A `writeTVar trigger True` is
-attempted from external thread while target thread is blocking at `retry` on the
-same `TVar`.  In other word, asynchronous exception `ThreadKilled` thrown by
-external thread attempts to interrupt the thread about to unblock.
+and unblocking operation of `retry` on TVar.  From one side, a `writeTVar
+trigger True` is attempted from external thread while target thread is blocking
+at `retry` on the same `TVar`.  On the other side, an asynchronous exception
+`ThreadKilled` is thrown by yet another external thread to the same target
+thread.
+
+In other word, it attempts to kill a thread about to unblock.
 
 I guess when the above two operation hit the same thread at the same time in
 parallel in SMP environment, GHC runtime falls into high CPU.
