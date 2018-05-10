@@ -71,7 +71,7 @@ If all numbers from 1 to 1000 were printed, reproducing  was unsuccessful.
 Here is an example when the issue was not reproduced.
 
 ```console
-$ ./Main +RTS -N
+$ ./Main +RTS -N1
 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
 ...
 990 991 992 993 994 995 996 997 998 999 1000 $
