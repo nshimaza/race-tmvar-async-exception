@@ -79,7 +79,7 @@ $ ./Main +RTS -N
 Reproducing the issue highly depends on runtime execution timing.  The timing
 was tuned via two of `threadDelay` found in the code but it doesn't guarantee
 the right timing on your environment.  To ensure the app really creating
-racy condition, add `v` option at the first command line argument.
+racing condition, add `v` option at the first command line argument.
 
 ```console
 $ .stack-work/install/x86_64-linux/nightly-2018-05-01/8.4.2/bin/race-tmvar-async-exception-exe v
