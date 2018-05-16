@@ -1,5 +1,7 @@
 # race-tmvar-async-exception
 
+[GHC ticket](https://ghc.haskell.org/trac/ghc/ticket/15136)
+
 This code demonstrates an issue in GHC runtime where runtime stalls at
 killThread and falls into high CPU.
 
