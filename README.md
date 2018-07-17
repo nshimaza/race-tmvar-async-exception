@@ -1,5 +1,7 @@
 # race-tmvar-async-exception
 
+This issue is fixed in GHC 8.6.1.
+
 [GHC ticket](https://ghc.haskell.org/trac/ghc/ticket/15136)
 
 This code demonstrates an issue in GHC runtime where runtime stalls at
